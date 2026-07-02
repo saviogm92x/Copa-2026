@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Copa 2026 · Painel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     COPA 2026 — Painel matchday
+     Fonte de dados ao vivo: API pública (não-oficial) da ESPN.
+     Tudo em um arquivo. Atualiza a cada hora e no botão Atualizar.
+     ============================================================ */
+
+  :root{
+    /* base "gramado sob refletor" */
+    --pitch:   #07171A;
+    --pitch-2: #0C2327;
+    --pitch-3: #123035;
+    --chalk:   #ECF4F1;
+    --mute:    #7C9A96;
+    --line:    rgba(150,195,185,.14);
+    --line-2:  rgba(150,195,185,.28);
+    --conn:    rgba(150,200,190,.34);
+
+    /* cores por rodada = o campo esquenta rumo à final (estrutura vira informação) */
+    --c-group: #93AEA9;
+    --c-r32:   #29D3E8;
+    --c-r16:   #F2B705;
+    --c-qf:    #F97316;
+    --c-sf:    #EF4444;
+    --c-third: #EC4899;
+    --c-final: #FBBF24;
+
+    --live:    #FF4D4D;
+    --win:     #33E0A1;
+
+    --gold:   #FFD24A;
+    --silver: #C9D2D6;
+    --bronze: #E08A4B;
+
+    --radius: 14px;
+    --maxw: 1180px;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{
+    margin:0;
+    font-family:"Inter",system-ui,sans-serif;
+    color:var(--chalk);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(41,211,232,.06), transparent 60%),
+      radial-gradient(1000px 700px at 100% 0%, rgba(251,191,36,.05), transparent 55%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.012) 0 46px, transparent 46px 92px),
+      var(--pitch);
+    line-height:1.5;
+    min-height:100vh;
+  }
+  a{ color:inherit; }
+
+  /* ---------- layout wrapper ---------- */
+  .wrap{ max-width:var(--maxw); margin:0 auto; padding:0 18px; }
+
+  /* ---------- header ---------- */
+  header.top{
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(12,35,39,.9), rgba(7,23,26,.6));
+    backdrop-filter:blur(6px);
+  }
+  .head-grid{
+    display:flex; flex-wrap:wrap; align-items:flex-end; gap:18px 26px;
+    padding:22px 0 18px;
+  }
+  .brand{ display:flex; flex-direction:column; gap:6px; min-width:min(100%,280px); }
+  .wordmark{
+    font-family:"Saira Condensed",sans-serif; font-weight:800;
+    font-size:clamp(38px,8vw,64px); line-height:.86; letter-spacing:.01em;
+    text-transform:uppercase; margin:0;
+    background:linear-gradient(92deg,var(--chalk) 40%, var(--c-r32) 78%, var(--c-final));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .wordmark small{
+    display:block; -webkit-text-fill-color:var(--mute); color:var(--mute);
+    font-family:"JetBrains Mono",monospace; font-weight:500;
+    font-size:12px; letter-spacing:.14em; margin-top:8px; text-transform:none;
+  }
+  .phase-pill{
+    display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+    font-family:"Saira Condensed",sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:.06em; font-size:13px; padding:6px 12px; border-radius:999px;
+    border:1px solid var(--line-2); background:rgba(255,255,255,.03);
+  }
+  .phase-pill .dot{ width:9px; height:9px; border-radius:50%; }
+
+  .head-right{ margin-left:auto; display:flex; flex-direction:column; gap:10px; align-items:flex-end; }
+  .refresh-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end; }
+  .updated{ font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--mute); }
+  .updated b{ color:var(--chalk); font-weight:500; }
+  button.refresh{
+    font-family:"Saira Condensed",sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:.06em; font-size:14px; color:var(--pitch);
+    background:var(--c-r32); border:none; border-radius:999px; padding:9px 16px;
+    cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:transform .12s ease, filter .12s ease;
+  }
+  button.refresh:hover{ filter:brightness(1.08); }
+  button.refresh:active{ transform:translateY(1px) scale(.99); }
+  button.refresh[disabled]{ opacity:.5; cursor:progress; }
+  .spin{ width:14px; height:14px; border:2px solid rgba(7,23,26,.35); border-top-color:var(--pitch); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  .src-badge{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.05em; color:var(--mute); display:flex; align-items:center; gap:6px; }
+  .src-badge .d{ width:7px; height:7px; border-radius:50%; background:var(--win); }
+  .src-badge.offline .d{ background:var(--c-r16); }
+
+  .statline{ display:flex; gap:22px; flex-wrap:wrap; padding:4px 0 16px; border-top:1px dashed var(--line); }
+  .stat{ display:flex; align-items:baseline; gap:8px; }
+  .stat .n{ font-family:"Saira Condensed",sans-serif; font-weight:700; font-size:22px; color:var(--chalk); }
+  .stat .l{ font-size:12px; color:var(--mute); letter-spacing:.04em; text-transform:uppercase; }
+
+  /* ---------- nav tabs ---------- */
+  nav.tabs{ position:sticky; top:0; z-index:20; background:rgba(7,23,26,.92); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .tabs-inner{ display:flex; gap:6px; overflow-x:auto; padding:10px 0; scrollbar-width:none; }
+  .tabs-inner::-webkit-scrollbar{ display:none; }
+  .tab{
+    flex:0 0 auto; font-family:"Saira Condensed",sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:.06em; font-size:15px; color:var(--mute); background:transparent;
+    border:1px solid transparent; border-radius:999px; padding:8px 16px; cursor:pointer; transition:color .15s, background .15s, border-color .15s;
+  }
+  .tab:hover{ color:var(--chalk); }
+  .tab[aria-selected="true"]{ color:var(--chalk); background:rgba(255,255,255,.05); border-color:var(--line-2); }
+
+  main{ padding:28px 0 80px; }
+  .panel[hidden]{ display:none; }
+  .section-title{
+    font-family:"Saira Condensed",sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; font-size:15px; color:var(--mute); margin:0 0 12px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-title::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .block{ margin-bottom:34px; }
+
+  /* ---------- match strip (Jogos) ---------- */
+  .day-head{
+    font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--mute); margin:18px 0 8px; padding-left:2px;
+  }
+  .matches{ display:grid; gap:8px; }
+  .match{
+    display:grid; grid-template-columns:4px 1fr auto;
+    align-items:stretch; gap:0;
+    background:linear-gradient(180deg,var(--pitch-2),rgba(12,35,39,.65));
+    border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+    animation:rise .35s ease both;
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none;} }
+  .match .rbar{ background:var(--c-r32); }
+  .match-body{ padding:12px 14px; display:grid; gap:9px; min-width:0; }
+  .side{ display:flex; align-items:center; gap:11px; min-width:0; }
+  .crest{
+    width:26px; height:26px; border-radius:6px; flex:0 0 auto; object-fit:cover;
+    background:rgba(255,255,255,.06); display:grid; place-items:center;
+    font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--mute); overflow:hidden;
+  }
+  .side .nm{ font-weight:600; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .side .ab{ font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--mute); flex:0 0 auto; }
+  .side.win .nm{ color:var(--chalk); }
+  .side.lose .nm{ color:var(--mute); }
+  .side.win .sc{ color:var(--win); }
+  .sc{
+    margin-left:auto; font-family:"Saira Condensed",sans-serif; font-weight:800; font-size:22px;
+    min-width:22px; text-align:right; font-variant-numeric:tabular-nums; flex:0 0 auto;
+  }
+  .pens{ font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--mute); margin-left:6px; }
+
+  .match-meta{
+    padding:12px 14px; display:flex; flex-direction:column; align-items:flex-end; justify-content:center;
+    gap:5px; text-align:right; border-left:1px solid var(--line); min-width:118px;
+  }
+  .kick{ font-family:"Saira Condensed",sans-serif; font-weight:700; font-size:19px; letter-spacing:.02em; }
+  .kick small{ font-family:"JetBrains Mono",monospace; font-weight:400; font-size:11px; color:var(--mute); display:block; }
+  .venue{ font-size:11px; color:var(--mute); max-width:150px; }
+  .tag{
+    font-family:"JetBrains Mono",monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--mute); border:1px solid var(--line-2); border-radius:6px; padding:2px 6px;
+  }
+  .tag.done{ color:var(--mute); }
+  .live-tag{ display:inline-flex; align-items:center; gap:6px; color:var(--live); font-weight:700; font-family:"Saira Condensed",sans-serif; letter-spacing:.06em; font-size:14px; text-transform:uppercase; }
+  .live-tag .pulse{ width:8px; height:8px; border-radius:50%; background:var(--live); animation:pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.35; transform:scale(1.5);} }
+  .match.islive{ border-color:rgba(255,77,77,.4); box-shadow:0 0 0 1px rgba(255,77,77,.15), 0 8px 30px -18px rgba(255,77,77,.5); }
+
+  details.round-fold{ border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:8px; }
+  details.round-fold > summary{ cursor:pointer; padding:12px 14px; font-family:"Saira Condensed",sans-serif; font-weight:700; letter-spacing:.05em; text-transform:uppercase; font-size:14px; color:var(--mute); list-style:none; display:flex; align-items:center; gap:10px; }
+  details.round-fold > summary::-webkit-details-marker{ display:none; }
+  details.round-fold > summary::before{ content:"▸"; color:var(--mute); transition:transform .15s; }
+  details.round-fold[open] > summary::before{ transform:rotate(90deg); }
+  details.round-fold .matches{ padding:0 10px 12px; }
+
+  .round-heading{ display:flex; align-items:center; gap:10px; margin:22px 0 10px; font-family:"Saira Condensed",sans-serif; font-weight:700; letter-spacing:.05em; text-transform:uppercase; font-size:15px; }
+  .round-heading .dot{ width:10px; height:10px; border-radius:50%; }
+
+  /* ---------- bracket ---------- */
+  .legend{ display:flex; gap:14px 18px; flex-wrap:wrap; margin-bottom:16px; font-size:12px; color:var(--mute); }
+  .legend span{ display:inline-flex; align-items:center; gap:7px; font-family:"JetBrains Mono",monospace; letter-spacing:.03em; }
+  .legend i{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+  .bracket-scroll{ overflow-x:auto; overflow-y:hidden; padding:4px 2px 18px; scrollbar-width:thin; }
+  .bracket{ display:flex; align-items:stretch; min-width:840px; }
+  .col{ flex:1 1 0; min-width:122px; display:flex; flex-direction:column; }
+  .col-head{ height:32px; flex:0 0 32px; font-family:"Saira Condensed",sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .col-head .dot{ width:9px; height:9px; border-radius:50%; }
+  .col-head .cnt{ font-family:"JetBrains Mono",monospace; font-size:10px; color:var(--mute); font-weight:400; margin-left:auto; }
+  .col-body{ flex:1; display:flex; flex-direction:column; }
+  .spot{ flex:1 0 auto; display:flex; align-items:center; padding:6px 0; }
+  .spot > .bcard{ width:100%; }
+  /* colunas conectoras — os cotovelos que ligam cada par de jogos à fase seguinte */
+  .conn{ flex:0 0 26px; display:flex; flex-direction:column; }
+  .conn-head{ height:32px; flex:0 0 32px; }
+  .conn-body{ flex:1; display:flex; flex-direction:column; }
+  .elbow{ flex:1 1 0; position:relative; }
+  .elbow::before{ content:""; position:absolute; left:2px; right:50%; top:25%; height:50%; border:1.5px solid var(--conn); border-left:none; border-top-right-radius:7px; border-bottom-right-radius:7px; }
+  .elbow::after{ content:""; position:absolute; left:50%; right:0; top:50%; border-top:1.5px solid var(--conn); }
+
+  .bcard{ border:1px solid var(--line); border-left-width:3px; border-radius:9px; background:var(--pitch-2); padding:7px 9px; display:grid; gap:5px; min-height:52px; box-sizing:border-box; }
+  .bcard.tbd{ border-style:dashed; opacity:.72; background:transparent; }
+  .brow{ display:flex; align-items:center; gap:8px; }
+  .brow .ab{ font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.03em; color:var(--chalk); }
+  .brow.lose .ab{ color:var(--mute); }
+  .brow.tbdrow .ab{ color:var(--mute); font-style:italic; }
+  .brow .bsc{ margin-left:auto; font-family:"Saira Condensed",sans-serif; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }
+  .brow.win .bsc, .brow.win .ab{ color:var(--win); }
+  .bcrest{ width:18px; height:18px; border-radius:4px; object-fit:cover; background:rgba(255,255,255,.06); flex:0 0 auto; }
+  .bdate{ font-family:"JetBrains Mono",monospace; font-size:9.5px; color:var(--mute); text-align:right; }
+  .final-col .bcard:not(.tbd){ box-shadow:0 0 0 1px rgba(251,191,36,.25), 0 0 34px -10px rgba(251,191,36,.55); }
+  .third-note{ margin-top:22px; }
+  .third-note .col-head{ font-size:12px; }
+  .bracket-hint{ color:var(--mute); font-size:12px; margin:0 0 16px; line-height:1.6; }
+
+  /* ---------- artilheiros ---------- */
+  .scorers{ display:grid; gap:10px; }
+  .scorer{ display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; background:var(--pitch-2); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; }
+  .rankn{ font-family:"Saira Condensed",sans-serif; font-weight:800; font-size:30px; width:34px; text-align:center; line-height:1; }
+  .sc-main{ min-width:0; }
+  .sc-name{ font-weight:700; font-size:17px; display:flex; align-items:center; gap:9px; }
+  .sc-name .flag{ font-size:18px; }
+  .sc-sub{ font-size:12.5px; color:var(--mute); margin-top:2px; }
+  .sc-bar{ height:7px; border-radius:999px; background:rgba(255,255,255,.06); margin-top:9px; overflow:hidden; }
+  .sc-bar i{ display:block; height:100%; border-radius:999px; }
+  .sc-goals{ text-align:right; }
+  .sc-goals b{ font-family:"Saira Condensed",sans-serif; font-weight:800; font-size:30px; line-height:1; }
+  .sc-goals span{ display:block; font-size:11px; color:var(--mute); font-family:"JetBrains Mono",monospace; letter-spacing:.04em; }
+  \g<1>
+  .tt-live, .tt-hist{ font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.04em; padding:2px 8px; border-radius:999px; text-transform:none; }
+  .tt-live{ color:var(--live); border:1px solid rgba(255,77,77,.4); }
+  .tt-hist{ color:var(--mute); border:1px solid var(--line-2); }
+  .artil-cap{ color:var(--mute); font-size:12.5px; margin-top:14px; line-height:1.7; }
+  .artil-cap b{ color:var(--chalk); font-weight:600; }
+
+  /* ---------- states ---------- */
+  .loading, .empty, .errorbox{ text-align:center; color:var(--mute); padding:48px 16px; }
+  .loading .spin{ margin:0 auto 14px; border-color:rgba(150,195,185,.25); border-top-color:var(--c-r32); width:26px; height:26px; }
+  .errorbox{ border:1px solid var(--line); border-radius:var(--radius); background:var(--pitch-2); }
+  .errorbox h3{ font-family:"Saira Condensed",sans-serif; color:var(--chalk); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px; }
+  .errorbox p{ margin:6px auto; max-width:520px; font-size:14px; }
+  .errorbox code{ font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--c-r32); }
+
+  .banner{ display:flex; gap:10px; align-items:flex-start; background:rgba(242,183,5,.08); border:1px solid rgba(242,183,5,.3); color:#F6D678; border-radius:12px; padding:11px 14px; font-size:13px; margin-bottom:22px; }
+  .banner b{ color:#FCE8A6; }
+  .banner[hidden]{ display:none; }
+
+  footer.foot{ border-top:1px solid var(--line); color:var(--mute); font-size:12.5px; padding:22px 0 40px; line-height:1.7; }
+  footer.foot b{ color:var(--chalk); font-weight:600; }
+  footer.foot code{ font-family:"JetBrains Mono",monospace; color:var(--c-r32); font-size:11.5px; }
+
+  /* ---------- marca d'água ---------- */
+  .watermark{
+    position:fixed; right:14px; bottom:12px; z-index:60;
+    font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.05em;
+    color:var(--mute); background:rgba(7,23,26,.85); backdrop-filter:blur(6px);
+    border:1px solid var(--line-2); border-radius:999px; padding:6px 12px;
+    pointer-events:none; user-select:none; opacity:.92;
+  }
+  .watermark b{ color:var(--chalk); font-weight:600; }
+
+  /* ---------- a11y / responsivo ---------- */
+  :focus-visible{ outline:2px solid var(--c-r32); outline-offset:2px; border-radius:4px; }
+  @media (max-width:640px){
+    .match{ grid-template-columns:4px 1fr; }
+    .match-meta{ grid-column:1 / -1; border-left:none; border-top:1px solid var(--line); flex-direction:row; align-items:center; justify-content:space-between; text-align:left; min-width:0; }
+    .venue{ display:none; }
+    .head-right{ align-items:flex-start; margin-left:0; width:100%; }
+    .refresh-row{ justify-content:flex-start; }
+    .scorer{ grid-template-columns:auto 1fr; }
+    .sc-goals{ grid-column:2; text-align:left; margin-top:6px; }
+    .sc-goals b, .rankn, .sc-goals span{ display:inline; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="head-grid">
+      <div class="brand">
+        <h1 class="wordmark">Copa 2026<small>ESTADOS UNIDOS · CANADÁ · MÉXICO — 11 JUN a 19 JUL</small></h1>
+        <span class="phase-pill" id="phasePill"><span class="dot" style="background:var(--mute)"></span> Carregando…</span>
+      </div>
+      <div class="head-right">
+        <div class="refresh-row">
+          <span class="updated" id="updated">—</span>
+          <button class="refresh" id="btnRefresh">Atualizar</button>
+        </div>
+        <span class="src-badge" id="srcBadge"><span class="d"></span> conectando…</span>
+        <span class="updated" id="cadence" style="font-size:11px">Atualiza sozinho a cada hora</span>
+      </div>
+    </div>
+    <div class="statline" id="statline"></div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="wrap">
+    <div class="tabs-inner" role="tablist">
+      <button class="tab" role="tab" aria-selected="true"  data-tab="jogos">Jogos</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="chave">Chaveamento</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="artil">Artilheiros</button>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="wrap">
+    <div class="banner" id="offlineBanner" hidden>
+      <span>⚠️</span>
+      <div>Não foi possível conectar à API ao vivo — exibindo o <b>retrato salvo do torneio</b> (pode estar atrasado). Abra o arquivo num navegador comum e toque em <b>Atualizar</b> para puxar os dados ao vivo.</div>
+    </div>
+
+    <!-- ===================== JOGOS ===================== -->
+    <section class="panel" id="panel-jogos">
+      <div id="liveWrap"></div>
+      <div class="block" id="upcomingWrap"></div>
+      <div class="block" id="resultsWrap"></div>
+    </section>
+
+    <!-- ===================== CHAVEAMENTO ===================== -->
+    <section class="panel" id="panel-chave" hidden>
+      <p class="section-title">Chaveamento — mata-mata</p>
+      <div class="legend" id="legend"></div>
+      <p class="bracket-hint">As linhas seguem o chaveamento oficial: cada confronto está ligado aos dois jogos de onde vêm seus classificados, da esquerda até a final. Role para os lados e para baixo para ver tudo; vagas “A definir” esperam as fases anteriores.</p>
+      <div class="bracket-scroll">
+        <div class="bracket" id="bracket"></div>
+      </div>
+      <div class="third-note" id="thirdWrap"></div>
+    </section>
+
+    <!-- ===================== ARTILHEIROS ===================== -->
+    <section class="panel" id="panel-artil" hidden>
+      <p class="section-title">Artilheiros da Copa 2026 <span class="tt-live">ao vivo</span></p>
+      <div class="scorers" id="scorers2026"></div>
+      <p class="artil-cap" id="cap2026">—</p>
+
+      <p class="section-title" style="margin-top:32px">Top 5 de todas as Copas <span class="tt-hist">histórico</span></p>
+      <div class="scorers" id="scorers"></div>
+      <p class="artil-cap">
+        Soma de todas as edições oficiais desde 1930 (dados FIFA), <b>atualizada em 30/06/2026</b>.
+        Messi e Mbappé seguem jogando e podem subir — por isso esta lista é curada à mão e
+        <b>não muda em tempo real</b> junto com os placares.
+      </p>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <b>Como funciona:</b> os jogos, resultados e o chaveamento vêm ao vivo da API pública (não-oficial) de placar da ESPN —
+    sem chave, direto do navegador. A busca cobre <code>11/06 → 19/07/2026</code> e roda no carregamento, a cada hora e no botão Atualizar.
+    Horários convertidos para o fuso de <b>Brasília</b>.<br />
+    Se você abrir por aqui (pré-visualização) e os dados não carregarem, é restrição de sandbox — baixe o <code>copa-2026.html</code> e abra no seu navegador.
+    Fonte do placar: <code>site.api.espn.com</code>. Artilharia histórica: FIFA. Made by <b>@saviogm92</b>.
+  </div>
+</footer>
+
+<div class="watermark">Made by <b>@saviogm92</b></div>
+
+<script>
+/* ================================================================
+   CONFIG
+   ================================================================ */
+const ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=500";
+const TZ = "America/Sao_Paulo";
+const HOUR = 60 * 60 * 1000;
+
+/* metadados das rodadas (cor + capacidade de jogos) */
+const ROUND_META = {
+  group: { label:"Fase de Grupos",       color:"var(--c-group)", cap:null, order:0 },
+  r32:   { label:"16-avos de final",      color:"var(--c-r32)",   cap:16,   order:1 },
+  r16:   { label:"Oitavas de final",      color:"var(--c-r16)",   cap:8,    order:2 },
+  qf:    { label:"Quartas de final",      color:"var(--c-qf)",    cap:4,    order:3 },
+  sf:    { label:"Semifinais",            color:"var(--c-sf)",    cap:2,    order:4 },
+  third: { label:"Disputa de 3º lugar",   color:"var(--c-third)", cap:1,    order:5 },
+  final: { label:"Final",                 color:"var(--c-final)", cap:1,    order:6 },
+};
+const BRACKET_ORDER = ["r32","r16","qf","sf","final"];
+
+/* limites de data (UTC) — confirmados pelo calendário da API */
+function roundForDate(iso){
+  const t = new Date(iso).getTime();
+  if (t < Date.parse("2026-06-28T06:00Z")) return "group";
+  if (t < Date.parse("2026-07-04T06:00Z")) return "r32";
+  if (t < Date.parse("2026-07-09T06:00Z")) return "r16";
+  if (t < Date.parse("2026-07-14T06:00Z")) return "qf";
+  if (t < Date.parse("2026-07-18T06:00Z")) return "sf";
+  if (t < Date.parse("2026-07-19T06:00Z")) return "third";
+  return "final";
+}
+
+/* nomes de seleções EN -> PT (cai para o nome original se faltar) */
+const PT = {
+  "Argentina":"Argentina","Brazil":"Brasil","France":"França","Spain":"Espanha","England":"Inglaterra",
+  "Germany":"Alemanha","Netherlands":"Holanda","Belgium":"Bélgica","Portugal":"Portugal","Italy":"Itália",
+  "Croatia":"Croácia","Uruguay":"Uruguai","Mexico":"México","USA":"Estados Unidos","United States":"Estados Unidos",
+  "Canada":"Canadá","Japan":"Japão","South Korea":"Coreia do Sul","Korea Republic":"Coreia do Sul",
+  "Australia":"Austrália","Morocco":"Marrocos","Senegal":"Senegal","Ghana":"Gana","Nigeria":"Nigéria",
+  "Cameroon":"Camarões","Egypt":"Egito","Algeria":"Argélia","Tunisia":"Tunísia","Ivory Coast":"Costa do Marfim",
+  "Côte d'Ivoire":"Costa do Marfim","South Africa":"África do Sul","Cape Verde":"Cabo Verde",
+  "Congo DR":"Rep. Dem. do Congo","DR Congo":"Rep. Dem. do Congo","Switzerland":"Suíça","Austria":"Áustria",
+  "Poland":"Polônia","Denmark":"Dinamarca","Sweden":"Suécia","Norway":"Noruega","Serbia":"Sérvia",
+  "Bosnia and Herzegovina":"Bósnia e Herzegovina","Bosnia & Herzegovina":"Bósnia e Herzegovina",
+  "Ukraine":"Ucrânia","Turkey":"Turquia","Türkiye":"Turquia","Greece":"Grécia","Scotland":"Escócia",
+  "Wales":"País de Gales","Ecuador":"Equador","Colombia":"Colômbia","Peru":"Peru","Paraguay":"Paraguai",
+  "Chile":"Chile","Bolivia":"Bolívia","Venezuela":"Venezuela","Iran":"Irã","IR Iran":"Irã","Iraq":"Iraque",
+  "Saudi Arabia":"Arábia Saudita","Qatar":"Catar","United Arab Emirates":"Emirados Árabes","Jordan":"Jordânia",
+  "Uzbekistan":"Uzbequistão","Costa Rica":"Costa Rica","Panama":"Panamá","Honduras":"Honduras",
+  "Jamaica":"Jamaica","New Zealand":"Nova Zelândia","Haiti":"Haiti","Curaçao":"Curaçao","Suriname":"Suriname",
+  "Guatemala":"Guatemala","El Salvador":"El Salvador","Angola":"Angola","Zambia":"Zâmbia","Mali":"Mali",
+  "Burkina Faso":"Burkina Faso","Nova Zelândia":"Nova Zelândia"
+};
+function ptName(n){
+  if (!n) return "A definir";
+  if (/\b(tbd|winner|runner|loser|advances|vencedor|group\s)\b/i.test(n)) return "A definir";
+  return PT[n] || n;
+}
+
+/* ================================================================
+   TOP 5 ARTILHEIROS DE TODAS AS COPAS  (curado — 30/06/2026)
+   Editável à mão. maxGoals define a escala das barras.
+   ================================================================ */
+const SCORERS = [
+  { name:"Lionel Messi",   flag:"🇦🇷", goals:19, active:true,  sub:"Argentina · 6 edições (2006–2026)" },
+  { name:"Kylian Mbappé",  flag:"🇫🇷", goals:18, active:true,  sub:"França · 3 edições (2018–2026)" },
+  { name:"Miroslav Klose", flag:"🇩🇪", goals:16, active:false, sub:"Alemanha · 4 edições (2002–2014)" },
+  { name:"Ronaldo",        flag:"🇧🇷", goals:15, active:false, sub:"Brasil · 3 edições (1998–2006)" },
+  { name:"Gerd Müller",    flag:"🇩🇪", goals:14, active:false, sub:"Alemanha Ocidental · 2 edições (1970, 1974)" },
+];
+const MEDAL = ["var(--gold)","var(--silver)","var(--bronze)","#5FBFA8","#5FBFA8"];
+
+/* ================================================================
+   RETRATO OFFLINE (fallback) — retrato completo do torneio salvo em
+   01/07/2026, usado só se a API ao vivo falhar. Gerado da propria API
+   (104 jogos) + artilharia 2026 pre-agregada. Substituido a cada build.
+   ================================================================ */
+const FALLBACK_MATCHES = [{"id":"760415","dateUTC":"2026-06-11T19:00Z","round":"group","venue":"Estadio Banorte · Mexico City","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Mexico","abbr":"MEX","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","color":"#006847","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"South Africa","abbr":"RSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rsa.png","color":"#FFB81C","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760414","dateUTC":"2026-06-12T02:00Z","round":"group","venue":"Estadio Akron · Guadalajara","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"South Korea","abbr":"KOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/kors.png","color":"#ce2028","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Czechia","abbr":"CZE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cze.png","color":"#d7141a","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760416","dateUTC":"2026-06-12T19:00Z","round":"group","venue":"BMO Field · Toronto","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Canada","abbr":"CAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/can.png","color":"#ed2224","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Bosnia-Herzegovina","abbr":"BIH","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bih.png","color":"#112855","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760417","dateUTC":"2026-06-13T01:00Z","round":"group","venue":"SoFi Stadium · Inglewood, California","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"United States","abbr":"USA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/usa.png","color":"#d42339","score":"4","winner":true,"shootout":null,"tbd":false},"away":{"name":"Paraguay","abbr":"PAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/par.png","color":"#ea2300","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760420","dateUTC":"2026-06-13T19:00Z","round":"group","venue":"Levi's Stadium · Santa Clara, California","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Qatar","abbr":"QAT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/qat.png","color":"#691a40","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Switzerland","abbr":"SUI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sui.png","color":"#FF0000","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760419","dateUTC":"2026-06-13T22:00Z","round":"group","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+25'","home":{"name":"Brazil","abbr":"BRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","color":"#fee000","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Morocco","abbr":"MAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","color":"#df2027","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760418","dateUTC":"2026-06-14T01:00Z","round":"group","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Haiti","abbr":"HAI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/hai.png","color":"#0033a0","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Scotland","abbr":"SCO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sco.png","color":"#1a2d69","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760421","dateUTC":"2026-06-14T04:00Z","round":"group","venue":"BC Place · Vancouver","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Australia","abbr":"AUS","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aus.png","color":"#FFCD00","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Türkiye","abbr":"TUR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tur.png","color":"#ffffff","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760422","dateUTC":"2026-06-14T17:00Z","round":"group","venue":"NRG Stadium · Houston, Texas","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Germany","abbr":"GER","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","color":"#FFFFFF","score":"7","winner":true,"shootout":null,"tbd":false},"away":{"name":"Curaçao","abbr":"CUW","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/11678.png","color":"#0537e4","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760425","dateUTC":"2026-06-14T20:00Z","round":"group","venue":"AT&T Stadium · Arlington, Texas","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Netherlands","abbr":"NED","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ned.png","color":"#fb5d00","score":"2","winner":false,"shootout":null,"tbd":false},"away":{"name":"Japan","abbr":"JPN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jpn.png","color":"#000555","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760423","dateUTC":"2026-06-14T23:00Z","round":"group","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Ivory Coast","abbr":"CIV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/civ.png","color":"#FF8200","score":"1","winner":true,"shootout":null,"tbd":false},"away":{"name":"Ecuador","abbr":"ECU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ecu.png","color":"#ffdd00","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760424","dateUTC":"2026-06-15T02:00Z","round":"group","venue":"Estadio BBVA · Guadalupe","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Sweden","abbr":"SWE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/swe.png","color":"#fecb00","score":"5","winner":true,"shootout":null,"tbd":false},"away":{"name":"Tunisia","abbr":"TUN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tun.png","color":"#D20300","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760428","dateUTC":"2026-06-15T16:00Z","round":"group","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Spain","abbr":"ESP","logo":"https://a.espncdn.com/i/teamlogos/countries/500/esp.png","color":"#c60b1e","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Cape Verde","abbr":"CPV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cpv.png","color":"#000080","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760426","dateUTC":"2026-06-15T19:00Z","round":"group","venue":"Lumen Field · Seattle, Washington","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Belgium","abbr":"BEL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bel.png","color":"#E30613","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Egypt","abbr":"EGY","logo":"https://a.espncdn.com/i/teamlogos/countries/500/egy.png","color":"#D20300","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760429","dateUTC":"2026-06-15T22:00Z","round":"group","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Saudi Arabia","abbr":"KSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ksa.png","color":"#FFFFFF","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Uruguay","abbr":"URU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uru.png","color":"#55B5E5","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760427","dateUTC":"2026-06-16T01:00Z","round":"group","venue":"SoFi Stadium · Inglewood, California","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Iran","abbr":"IRN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irn.png","color":"#FFFFFF","score":"2","winner":false,"shootout":null,"tbd":false},"away":{"name":"New Zealand","abbr":"NZL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nzl.png","color":"#000000","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760432","dateUTC":"2026-06-16T19:00Z","round":"group","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+10'","home":{"name":"France","abbr":"FRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","color":"#000080","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Senegal","abbr":"SEN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sen.png","color":"#FFFFFF","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760430","dateUTC":"2026-06-16T22:00Z","round":"group","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Iraq","abbr":"IRQ","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irq.png","color":"#FFFFFF","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Norway","abbr":"NOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","color":"#C8102E","score":"4","winner":true,"shootout":null,"tbd":false}},{"id":"760433","dateUTC":"2026-06-17T01:00Z","round":"group","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Argentina","abbr":"ARG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/arg.png","color":"#74acdf","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Algeria","abbr":"ALG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/alg.png","color":"#4F9A44","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760431","dateUTC":"2026-06-17T04:00Z","round":"group","venue":"Levi's Stadium · Santa Clara, California","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+14'","home":{"name":"Austria","abbr":"AUT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aut.png","color":"#d72b2c","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Jordan","abbr":"JOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jor.png","color":"#E70000","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760435","dateUTC":"2026-06-17T17:00Z","round":"group","venue":"NRG Stadium · Houston, Texas","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Portugal","abbr":"POR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/por.png","color":"#da291c","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Congo DR","abbr":"COD","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rdc.png","color":"#418fde","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760437","dateUTC":"2026-06-17T20:00Z","round":"group","venue":"AT&T Stadium · Arlington, Texas","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"England","abbr":"ENG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","color":"#ffffff","score":"4","winner":true,"shootout":null,"tbd":false},"away":{"name":"Croatia","abbr":"CRO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cro.png","color":"#ff0000","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760434","dateUTC":"2026-06-17T23:00Z","round":"group","venue":"BMO Field · Toronto","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+11'","home":{"name":"Ghana","abbr":"GHA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/gha.png","color":"#fbd632","score":"1","winner":true,"shootout":null,"tbd":false},"away":{"name":"Panama","abbr":"PAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/pan.png","color":"#d21034","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760436","dateUTC":"2026-06-18T02:00Z","round":"group","venue":"Estadio Banorte · Mexico City","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+11'","home":{"name":"Uzbekistan","abbr":"UZB","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uzb.png","color":"#ffffff","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Colombia","abbr":"COL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/col.png","color":"#fbd632","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760438","dateUTC":"2026-06-18T16:00Z","round":"group","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Czechia","abbr":"CZE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cze.png","color":"#d7141a","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"South Africa","abbr":"RSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rsa.png","color":"#FFB81C","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760439","dateUTC":"2026-06-18T19:00Z","round":"group","venue":"SoFi Stadium · Inglewood, California","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Switzerland","abbr":"SUI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sui.png","color":"#FF0000","score":"4","winner":true,"shootout":null,"tbd":false},"away":{"name":"Bosnia-Herzegovina","abbr":"BIH","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bih.png","color":"#112855","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760440","dateUTC":"2026-06-18T22:00Z","round":"group","venue":"BC Place · Vancouver","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+10'","home":{"name":"Canada","abbr":"CAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/can.png","color":"#ed2224","score":"6","winner":true,"shootout":null,"tbd":false},"away":{"name":"Qatar","abbr":"QAT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/qat.png","color":"#691a40","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760441","dateUTC":"2026-06-19T01:00Z","round":"group","venue":"Estadio Akron · Guadalajara","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Mexico","abbr":"MEX","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","color":"#006847","score":"1","winner":true,"shootout":null,"tbd":false},"away":{"name":"South Korea","abbr":"KOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/kors.png","color":"#ce2028","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760442","dateUTC":"2026-06-19T19:00Z","round":"group","venue":"Lumen Field · Seattle, Washington","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"United States","abbr":"USA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/usa.png","color":"#d42339","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Australia","abbr":"AUS","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aus.png","color":"#FFCD00","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760445","dateUTC":"2026-06-19T22:00Z","round":"group","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Scotland","abbr":"SCO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sco.png","color":"#1a2d69","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Morocco","abbr":"MAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","color":"#df2027","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760444","dateUTC":"2026-06-20T00:30Z","round":"group","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Brazil","abbr":"BRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","color":"#fee000","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Haiti","abbr":"HAI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/hai.png","color":"#0033a0","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760443","dateUTC":"2026-06-20T03:00Z","round":"group","venue":"Levi's Stadium · Santa Clara, California","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"Türkiye","abbr":"TUR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tur.png","color":"#ffffff","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Paraguay","abbr":"PAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/par.png","color":"#ea2300","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760447","dateUTC":"2026-06-20T17:00Z","round":"group","venue":"NRG Stadium · Houston, Texas","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Netherlands","abbr":"NED","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ned.png","color":"#fb5d00","score":"5","winner":true,"shootout":null,"tbd":false},"away":{"name":"Sweden","abbr":"SWE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/swe.png","color":"#fecb00","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760448","dateUTC":"2026-06-20T20:00Z","round":"group","venue":"BMO Field · Toronto","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Germany","abbr":"GER","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","color":"#FFFFFF","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Ivory Coast","abbr":"CIV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/civ.png","color":"#FF8200","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760446","dateUTC":"2026-06-21T00:00Z","round":"group","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Ecuador","abbr":"ECU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ecu.png","color":"#ffdd00","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Curaçao","abbr":"CUW","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/11678.png","color":"#0537e4","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760449","dateUTC":"2026-06-21T04:00Z","round":"group","venue":"Estadio BBVA · Guadalupe","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Tunisia","abbr":"TUN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tun.png","color":"#D20300","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Japan","abbr":"JPN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jpn.png","color":"#000555","score":"4","winner":true,"shootout":null,"tbd":false}},{"id":"760453","dateUTC":"2026-06-21T16:00Z","round":"group","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Spain","abbr":"ESP","logo":"https://a.espncdn.com/i/teamlogos/countries/500/esp.png","color":"#c60b1e","score":"4","winner":true,"shootout":null,"tbd":false},"away":{"name":"Saudi Arabia","abbr":"KSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ksa.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760451","dateUTC":"2026-06-21T19:00Z","round":"group","venue":"SoFi Stadium · Inglewood, California","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Belgium","abbr":"BEL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bel.png","color":"#E30613","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Iran","abbr":"IRN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irn.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760450","dateUTC":"2026-06-21T22:00Z","round":"group","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Uruguay","abbr":"URU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uru.png","color":"#55B5E5","score":"2","winner":false,"shootout":null,"tbd":false},"away":{"name":"Cape Verde","abbr":"CPV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cpv.png","color":"#000080","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760452","dateUTC":"2026-06-22T01:00Z","round":"group","venue":"BC Place · Vancouver","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+10'","home":{"name":"New Zealand","abbr":"NZL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nzl.png","color":"#000000","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Egypt","abbr":"EGY","logo":"https://a.espncdn.com/i/teamlogos/countries/500/egy.png","color":"#D20300","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760456","dateUTC":"2026-06-22T17:00Z","round":"group","venue":"AT&T Stadium · Arlington, Texas","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Argentina","abbr":"ARG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/arg.png","color":"#74acdf","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Austria","abbr":"AUT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aut.png","color":"#d72b2c","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760457","dateUTC":"2026-06-22T21:00Z","round":"group","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+2'","home":{"name":"France","abbr":"FRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","color":"#000080","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Iraq","abbr":"IRQ","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irq.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760454","dateUTC":"2026-06-23T00:00Z","round":"group","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+10'","home":{"name":"Norway","abbr":"NOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","color":"#C8102E","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Senegal","abbr":"SEN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sen.png","color":"#FFFFFF","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760455","dateUTC":"2026-06-23T03:00Z","round":"group","venue":"Levi's Stadium · Santa Clara, California","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Jordan","abbr":"JOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jor.png","color":"#E70000","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Algeria","abbr":"ALG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/alg.png","color":"#4F9A44","score":"2","winner":true,"shootout":null,"tbd":false}},{"id":"760461","dateUTC":"2026-06-23T17:00Z","round":"group","venue":"NRG Stadium · Houston, Texas","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Portugal","abbr":"POR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/por.png","color":"#da291c","score":"5","winner":true,"shootout":null,"tbd":false},"away":{"name":"Uzbekistan","abbr":"UZB","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uzb.png","color":"#ffffff","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760458","dateUTC":"2026-06-23T20:00Z","round":"group","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"England","abbr":"ENG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","color":"#ffffff","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Ghana","abbr":"GHA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/gha.png","color":"#fbd632","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760460","dateUTC":"2026-06-23T23:00Z","round":"group","venue":"BMO Field · Toronto","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Panama","abbr":"PAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/pan.png","color":"#d21034","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Croatia","abbr":"CRO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cro.png","color":"#ff0000","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760459","dateUTC":"2026-06-24T02:00Z","round":"group","venue":"Estadio Akron · Guadalajara","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Colombia","abbr":"COL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/col.png","color":"#fbd632","score":"1","winner":true,"shootout":null,"tbd":false},"away":{"name":"Congo DR","abbr":"COD","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rdc.png","color":"#418fde","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760462","dateUTC":"2026-06-24T19:00Z","round":"group","venue":"Lumen Field · Seattle, Washington","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Bosnia-Herzegovina","abbr":"BIH","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bih.png","color":"#112855","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Qatar","abbr":"QAT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/qat.png","color":"#691a40","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760463","dateUTC":"2026-06-24T19:00Z","round":"group","venue":"BC Place · Vancouver","group":"Grupo B","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Switzerland","abbr":"SUI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sui.png","color":"#FF0000","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Canada","abbr":"CAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/can.png","color":"#ed2224","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760464","dateUTC":"2026-06-24T22:00Z","round":"group","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"Morocco","abbr":"MAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","color":"#df2027","score":"4","winner":true,"shootout":null,"tbd":false},"away":{"name":"Haiti","abbr":"HAI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/hai.png","color":"#0033a0","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760465","dateUTC":"2026-06-24T22:00Z","round":"group","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"Grupo C","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Scotland","abbr":"SCO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sco.png","color":"#1a2d69","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Brazil","abbr":"BRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","color":"#fee000","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760467","dateUTC":"2026-06-25T01:00Z","round":"group","venue":"Estadio Banorte · Mexico City","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Czechia","abbr":"CZE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cze.png","color":"#d7141a","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Mexico","abbr":"MEX","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","color":"#006847","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760466","dateUTC":"2026-06-25T01:00Z","round":"group","venue":"Estadio BBVA · Guadalupe","group":"Grupo A","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"South Africa","abbr":"RSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rsa.png","color":"#FFB81C","score":"1","winner":true,"shootout":null,"tbd":false},"away":{"name":"South Korea","abbr":"KOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/kors.png","color":"#ce2028","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760473","dateUTC":"2026-06-25T20:00Z","round":"group","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Curaçao","abbr":"CUW","logo":"https://a.espncdn.com/i/teamlogos/soccer/500/11678.png","color":"#0537e4","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Ivory Coast","abbr":"CIV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/civ.png","color":"#FF8200","score":"2","winner":true,"shootout":null,"tbd":false}},{"id":"760468","dateUTC":"2026-06-25T20:00Z","round":"group","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"Grupo E","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Ecuador","abbr":"ECU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ecu.png","color":"#ffdd00","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Germany","abbr":"GER","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","color":"#FFFFFF","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760471","dateUTC":"2026-06-25T23:00Z","round":"group","venue":"AT&T Stadium · Arlington, Texas","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Japan","abbr":"JPN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jpn.png","color":"#000555","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Sweden","abbr":"SWE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/swe.png","color":"#fecb00","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760472","dateUTC":"2026-06-25T23:00Z","round":"group","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"Grupo F","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Tunisia","abbr":"TUN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tun.png","color":"#D20300","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Netherlands","abbr":"NED","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ned.png","color":"#fb5d00","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760469","dateUTC":"2026-06-26T02:00Z","round":"group","venue":"Levi's Stadium · Santa Clara, California","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Paraguay","abbr":"PAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/par.png","color":"#ea2300","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Australia","abbr":"AUS","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aus.png","color":"#FFCD00","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760470","dateUTC":"2026-06-26T02:00Z","round":"group","venue":"SoFi Stadium · Inglewood, California","group":"Grupo D","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"Türkiye","abbr":"TUR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/tur.png","color":"#ffffff","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"United States","abbr":"USA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/usa.png","color":"#d42339","score":"2","winner":false,"shootout":null,"tbd":false}},{"id":"760475","dateUTC":"2026-06-26T19:00Z","round":"group","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Norway","abbr":"NOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","color":"#C8102E","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"France","abbr":"FRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","color":"#000080","score":"4","winner":true,"shootout":null,"tbd":false}},{"id":"760474","dateUTC":"2026-06-26T19:00Z","round":"group","venue":"BMO Field · Toronto","group":"Grupo I","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Senegal","abbr":"SEN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sen.png","color":"#FFFFFF","score":"5","winner":true,"shootout":null,"tbd":false},"away":{"name":"Iraq","abbr":"IRQ","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irq.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760478","dateUTC":"2026-06-27T00:00Z","round":"group","venue":"NRG Stadium · Houston, Texas","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+5'","home":{"name":"Cape Verde","abbr":"CPV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cpv.png","color":"#000080","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Saudi Arabia","abbr":"KSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ksa.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760479","dateUTC":"2026-06-27T00:00Z","round":"group","venue":"Estadio Akron · Guadalajara","group":"Grupo H","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Uruguay","abbr":"URU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uru.png","color":"#55B5E5","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Spain","abbr":"ESP","logo":"https://a.espncdn.com/i/teamlogos/countries/500/esp.png","color":"#c60b1e","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760476","dateUTC":"2026-06-27T03:00Z","round":"group","venue":"Lumen Field · Seattle, Washington","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"Egypt","abbr":"EGY","logo":"https://a.espncdn.com/i/teamlogos/countries/500/egy.png","color":"#D20300","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Iran","abbr":"IRN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/irn.png","color":"#FFFFFF","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760477","dateUTC":"2026-06-27T03:00Z","round":"group","venue":"BC Place · Vancouver","group":"Grupo G","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"New Zealand","abbr":"NZL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nzl.png","color":"#000000","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Belgium","abbr":"BEL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bel.png","color":"#E30613","score":"5","winner":true,"shootout":null,"tbd":false}},{"id":"760480","dateUTC":"2026-06-27T21:00Z","round":"group","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Croatia","abbr":"CRO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cro.png","color":"#ff0000","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Ghana","abbr":"GHA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/gha.png","color":"#fbd632","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760485","dateUTC":"2026-06-27T21:00Z","round":"group","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"Grupo L","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Panama","abbr":"PAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/pan.png","color":"#d21034","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"England","abbr":"ENG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","color":"#ffffff","score":"2","winner":true,"shootout":null,"tbd":false}},{"id":"760481","dateUTC":"2026-06-27T23:30Z","round":"group","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Colombia","abbr":"COL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/col.png","color":"#fbd632","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Portugal","abbr":"POR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/por.png","color":"#da291c","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760482","dateUTC":"2026-06-27T23:30Z","round":"group","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"Grupo K","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Congo DR","abbr":"COD","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rdc.png","color":"#418fde","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Uzbekistan","abbr":"UZB","logo":"https://a.espncdn.com/i/teamlogos/countries/500/uzb.png","color":"#ffffff","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760484","dateUTC":"2026-06-28T02:00Z","round":"group","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"Algeria","abbr":"ALG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/alg.png","color":"#4F9A44","score":"3","winner":false,"shootout":null,"tbd":false},"away":{"name":"Austria","abbr":"AUT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aut.png","color":"#d72b2c","score":"3","winner":false,"shootout":null,"tbd":false}},{"id":"760483","dateUTC":"2026-06-28T02:00Z","round":"group","venue":"AT&T Stadium · Arlington, Texas","group":"Grupo J","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"Jordan","abbr":"JOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jor.png","color":"#E70000","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Argentina","abbr":"ARG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/arg.png","color":"#74acdf","score":"3","winner":true,"shootout":null,"tbd":false}},{"id":"760486","dateUTC":"2026-06-28T19:00Z","round":"r32","venue":"SoFi Stadium · Inglewood, California","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+6'","home":{"name":"South Africa","abbr":"RSA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rsa.png","color":"#FFB81C","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Canada","abbr":"CAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/can.png","color":"#ed2224","score":"1","winner":true,"shootout":null,"tbd":false}},{"id":"760487","dateUTC":"2026-06-29T17:00Z","round":"r32","venue":"NRG Stadium · Houston, Texas","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+11'","home":{"name":"Brazil","abbr":"BRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","color":"#fee000","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Japan","abbr":"JPN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/jpn.png","color":"#000555","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760489","dateUTC":"2026-06-29T20:30Z","round":"r32","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"","state":"post","completed":true,"detail":"FT-Pens","clock":"120'","home":{"name":"Germany","abbr":"GER","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","color":"#FFFFFF","score":"1","winner":false,"shootout":3,"tbd":false},"away":{"name":"Paraguay","abbr":"PAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/par.png","color":"#ea2300","score":"1","winner":true,"shootout":4,"tbd":false}},{"id":"760488","dateUTC":"2026-06-30T01:00Z","round":"r32","venue":"Estadio BBVA · Guadalupe","group":"","state":"post","completed":true,"detail":"FT-Pens","clock":"120'","home":{"name":"Netherlands","abbr":"NED","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ned.png","color":"#fb5d00","score":"1","winner":false,"shootout":2,"tbd":false},"away":{"name":"Morocco","abbr":"MAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","color":"#df2027","score":"1","winner":true,"shootout":3,"tbd":false}},{"id":"760490","dateUTC":"2026-06-30T17:00Z","round":"r32","venue":"AT&T Stadium · Arlington, Texas","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+8'","home":{"name":"Ivory Coast","abbr":"CIV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/civ.png","color":"#FF8200","score":"1","winner":false,"shootout":null,"tbd":false},"away":{"name":"Norway","abbr":"NOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","color":"#C8102E","score":"2","winner":true,"shootout":null,"tbd":false}},{"id":"760492","dateUTC":"2026-06-30T21:00Z","round":"r32","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+4'","home":{"name":"France","abbr":"FRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","color":"#000080","score":"3","winner":true,"shootout":null,"tbd":false},"away":{"name":"Sweden","abbr":"SWE","logo":"https://a.espncdn.com/i/teamlogos/countries/500/swe.png","color":"#fecb00","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760491","dateUTC":"2026-07-01T02:00Z","round":"r32","venue":"Estadio Banorte · Mexico City","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+9'","home":{"name":"Mexico","abbr":"MEX","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","color":"#006847","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Ecuador","abbr":"ECU","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ecu.png","color":"#ffdd00","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760495","dateUTC":"2026-07-01T16:00Z","round":"r32","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"","state":"post","completed":true,"detail":"FT","clock":"90'+7'","home":{"name":"England","abbr":"ENG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","color":"#ffffff","score":"2","winner":true,"shootout":null,"tbd":false},"away":{"name":"Congo DR","abbr":"COD","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rdc.png","color":"#418fde","score":"1","winner":false,"shootout":null,"tbd":false}},{"id":"760493","dateUTC":"2026-07-01T20:00Z","round":"r32","venue":"Lumen Field · Seattle, Washington","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Belgium","abbr":"BEL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bel.png","color":"#E30613","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Senegal","abbr":"SEN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sen.png","color":"#FFFFFF","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760494","dateUTC":"2026-07-02T00:00Z","round":"r32","venue":"Levi's Stadium · Santa Clara, California","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"United States","abbr":"USA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/usa.png","color":"#d42339","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Bosnia-Herzegovina","abbr":"BIH","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bih.png","color":"#112855","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760497","dateUTC":"2026-07-02T19:00Z","round":"r32","venue":"SoFi Stadium · Inglewood, California","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Spain","abbr":"ESP","logo":"https://a.espncdn.com/i/teamlogos/countries/500/esp.png","color":"#c60b1e","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Austria","abbr":"AUT","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aut.png","color":"#d72b2c","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760496","dateUTC":"2026-07-02T23:00Z","round":"r32","venue":"BMO Field · Toronto","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Portugal","abbr":"POR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/por.png","color":"#da291c","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Croatia","abbr":"CRO","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cro.png","color":"#ff0000","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760498","dateUTC":"2026-07-03T03:00Z","round":"r32","venue":"BC Place · Vancouver","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Switzerland","abbr":"SUI","logo":"https://a.espncdn.com/i/teamlogos/countries/500/sui.png","color":"#FF0000","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Algeria","abbr":"ALG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/alg.png","color":"#4F9A44","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760499","dateUTC":"2026-07-03T18:00Z","round":"r32","venue":"AT&T Stadium · Arlington, Texas","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Australia","abbr":"AUS","logo":"https://a.espncdn.com/i/teamlogos/countries/500/aus.png","color":"#FFCD00","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Egypt","abbr":"EGY","logo":"https://a.espncdn.com/i/teamlogos/countries/500/egy.png","color":"#D20300","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760500","dateUTC":"2026-07-03T22:00Z","round":"r32","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Argentina","abbr":"ARG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/arg.png","color":"#74acdf","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Cape Verde","abbr":"CPV","logo":"https://a.espncdn.com/i/teamlogos/countries/500/cpv.png","color":"#000080","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760501","dateUTC":"2026-07-04T01:30Z","round":"r32","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Colombia","abbr":"COL","logo":"https://a.espncdn.com/i/teamlogos/countries/500/col.png","color":"#fbd632","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Ghana","abbr":"GHA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/gha.png","color":"#fbd632","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760502","dateUTC":"2026-07-04T17:00Z","round":"r16","venue":"NRG Stadium · Houston, Texas","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Canada","abbr":"CAN","logo":"https://a.espncdn.com/i/teamlogos/countries/500/can.png","color":"#ed2224","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Morocco","abbr":"MAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","color":"#df2027","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760503","dateUTC":"2026-07-04T21:00Z","round":"r16","venue":"Lincoln Financial Field · Philadelphia, Pennsylvania","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Paraguay","abbr":"PAR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/par.png","color":"#ea2300","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"France","abbr":"FRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","color":"#000080","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760504","dateUTC":"2026-07-05T20:00Z","round":"r16","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Brazil","abbr":"BRA","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","color":"#fee000","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"Norway","abbr":"NOR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","color":"#C8102E","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760505","dateUTC":"2026-07-06T00:00Z","round":"r16","venue":"Estadio Banorte · Mexico City","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Mexico","abbr":"MEX","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","color":"#006847","score":"0","winner":false,"shootout":null,"tbd":false},"away":{"name":"England","abbr":"ENG","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","color":"#ffffff","score":"0","winner":false,"shootout":null,"tbd":false}},{"id":"760506","dateUTC":"2026-07-06T19:00Z","round":"r16","venue":"AT&T Stadium · Arlington, Texas","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 32 11 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 32 12 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760507","dateUTC":"2026-07-07T00:00Z","round":"r16","venue":"Lumen Field · Seattle, Washington","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 32 9 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 32 10 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760509","dateUTC":"2026-07-07T16:00Z","round":"r16","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 32 14 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 32 16 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760508","dateUTC":"2026-07-07T20:00Z","round":"r16","venue":"BC Place · Vancouver","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 32 13 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 32 15 Winner","abbr":"RD32","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760510","dateUTC":"2026-07-09T20:00Z","round":"qf","venue":"Gillette Stadium · Foxborough, Massachusetts","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 16 1 Winner","abbr":"RD16 W1","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 16 2 Winner","abbr":"RD16 W2","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760511","dateUTC":"2026-07-10T19:00Z","round":"qf","venue":"SoFi Stadium · Inglewood, California","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 16 5 Winner","abbr":"RD16 W5","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 16 6 Winner","abbr":"RD16 W6","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760512","dateUTC":"2026-07-11T21:00Z","round":"qf","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 16 3 Winner","abbr":"RD16 W3","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 16 4 Winner","abbr":"RD16 W4","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760513","dateUTC":"2026-07-12T01:00Z","round":"qf","venue":"GEHA Field at Arrowhead Stadium · Kansas City, Missouri","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Round of 16 7 Winner","abbr":"RD16 W7","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Round of 16 8 Winner","abbr":"RD16 W8","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760514","dateUTC":"2026-07-14T19:00Z","round":"sf","venue":"AT&T Stadium · Arlington, Texas","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Quarterfinal 1 Winner","abbr":"QFW1","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Quarterfinal 2 Winner","abbr":"QFW2","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760515","dateUTC":"2026-07-15T19:00Z","round":"sf","venue":"Mercedes-Benz Stadium · Atlanta, Georgia","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Quarterfinal 3 Winner","abbr":"QFW3","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Quarterfinal 4 Winner","abbr":"QW4","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760516","dateUTC":"2026-07-18T21:00Z","round":"third","venue":"Hard Rock Stadium · Miami Gardens, Florida","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Semifinal 1 Loser","abbr":"SF L1","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Semifinal 2 Loser","abbr":"SF L2","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}},{"id":"760517","dateUTC":"2026-07-19T19:00Z","round":"final","venue":"MetLife Stadium · East Rutherford, New Jersey","group":"","state":"pre","completed":false,"detail":"Scheduled","clock":"0'","home":{"name":"Semifinal 1 Winner","abbr":"SFW1","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true},"away":{"name":"Semifinal 2 Winner","abbr":"SFW2","logo":"","color":"#000000","score":"0","winner":false,"shootout":null,"tbd":true}}];
+const FALLBACK_2026 = [{"goals":6,"name":"Kylian Mbappé","abbr":"FRA","teamName":"France","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","pen":0},{"goals":6,"name":"Lionel Messi","abbr":"ARG","teamName":"Argentina","logo":"https://a.espncdn.com/i/teamlogos/countries/500/arg.png","pen":0},{"goals":5,"name":"Erling Haaland","abbr":"NOR","teamName":"Norway","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nor.png","pen":0},{"goals":5,"name":"Harry Kane","abbr":"ENG","teamName":"England","logo":"https://a.espncdn.com/i/teamlogos/countries/500/eng.png","pen":1},{"goals":4,"name":"Vinícius Júnior","abbr":"BRA","teamName":"Brazil","logo":"https://a.espncdn.com/i/teamlogos/countries/500/bra.png","pen":0},{"goals":4,"name":"Ousmane Dembélé","abbr":"FRA","teamName":"France","logo":"https://a.espncdn.com/i/teamlogos/countries/500/fra.png","pen":0},{"goals":3,"name":"Julián Quiñones","abbr":"MEX","teamName":"Mexico","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mex.png","pen":0},{"goals":3,"name":"Ismael Saibari","abbr":"MAR","teamName":"Morocco","logo":"https://a.espncdn.com/i/teamlogos/countries/500/mar.png","pen":0},{"goals":3,"name":"Kai Havertz","abbr":"GER","teamName":"Germany","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","pen":1},{"goals":3,"name":"Deniz Undav","abbr":"GER","teamName":"Germany","logo":"https://a.espncdn.com/i/teamlogos/countries/500/ger.png","pen":0},{"goals":3,"name":"Elijah Just","abbr":"NZL","teamName":"New Zealand","logo":"https://a.espncdn.com/i/teamlogos/countries/500/nzl.png","pen":0},{"goals":3,"name":"Yoane Wissa","abbr":"COD","teamName":"Congo DR","logo":"https://a.espncdn.com/i/teamlogos/countries/500/rdc.png","pen":1}];
+
+/* prepara o retrato salvo: traduz nomes, zera placar de jogos futuros, guarda nome cru */
+function prepFallback(list){
+  return list.map(m => {
+    const pre = (m.state || "pre") === "pre";
+    const fix = s => Object.assign({}, s, {
+      raw: s.name,
+      name: ptName(s.name),
+      score: pre ? null : s.score,
+      shootout: pre ? null : s.shootout,
+    });
+    return Object.assign({}, m, { home: fix(m.home), away: fix(m.away) });
+  });
+}
+
+/* ================================================================
+   FORMATAÇÃO
+   ================================================================ */
+const fmtWeek = new Intl.DateTimeFormat("pt-BR",{ weekday:"short", day:"numeric", month:"short", timeZone:TZ });
+const fmtDayKey = new Intl.DateTimeFormat("pt-BR",{ weekday:"long", day:"numeric", month:"long", timeZone:TZ });
+const fmtTime = new Intl.DateTimeFormat("pt-BR",{ hour:"2-digit", minute:"2-digit", timeZone:TZ });
+const fmtClock = new Intl.DateTimeFormat("pt-BR",{ hour:"2-digit", minute:"2-digit", timeZone:TZ });
+function timeLabel(iso){ return fmtTime.format(new Date(iso)).replace(":","h"); }
+function shortDate(iso){ return fmtWeek.format(new Date(iso)).replace(".",""); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c])); }
+
+/* ================================================================
+   NORMALIZAÇÃO DA RESPOSTA DA ESPN
+   ================================================================ */
+function normalize(json){
+  const out = [];
+  const events = (json && json.events) || [];
+  for (const ev of events){
+    const c = (ev.competitions && ev.competitions[0]) || {};
+    const comps = c.competitors || [];
+    const home = comps.find(x=>x.homeAway==="home") || comps[0] || {};
+    const away = comps.find(x=>x.homeAway==="away") || comps[1] || {};
+    const st = (c.status && c.status.type) || {};
+    const pre = (st.state || "pre") === "pre";      // jogo ainda não começou: ESPN manda score "0", que deve ser ignorado
+    const side = t => {
+      const team = t.team || {};
+      const nm = team.displayName || team.name || "";
+      return {
+        raw: nm,                                     // nome cru ("Round of 32 11 Winner") p/ montar o chaveamento oficial
+        name: ptName(nm),
+        abbr: team.abbreviation || "",
+        logo: team.logo || "",
+        color: team.color ? ("#"+team.color) : "",
+        score: (!pre && t.score!=null && t.score!=="") ? t.score : null,
+        winner: !!t.winner,
+        shootout: (!pre && t.shootoutScore!=null && t.shootoutScore!=="") ? t.shootoutScore : null,
+        tbd: !nm || /\b(tbd|winner|runner|loser)\b/i.test(nm),
+      };
+    };
+    let group = "";
+    const note = c.altGameNote || "";
+    const gm = note.match(/Group\s+([A-Z0-9]+)/i);
+    if (gm) group = "Grupo " + gm[1];
+    out.push({
+      id: ev.id,
+      dateUTC: ev.date,
+      round: roundForDate(ev.date),
+      venue: c.venue ? (c.venue.fullName || "") + (c.venue.address && c.venue.address.city ? " · "+c.venue.address.city : "") : "",
+      group,
+      state: st.state || "pre",
+      completed: !!st.completed,
+      detail: st.shortDetail || st.description || "",
+      clock: (c.status && c.status.displayClock) || "",
+      home: side(home),
+      away: side(away),
+    });
+  }
+  out.sort((a,b)=> new Date(a.dateUTC) - new Date(b.dateUTC));
+  return out;
+}
+
+/* ================================================================
+   RENDER — helpers de célula
+   ================================================================ */
+function crest(side){
+  if (side.tbd) return '<span class="crest">?</span>';
+  if (side.logo) return '<img class="crest" src="'+esc(side.logo)+'" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'crest\',textContent:\''+esc((side.abbr||"").slice(0,3))+'\'}))">';
+  return '<span class="crest">'+esc((side.abbr||"·").slice(0,3))+'</span>';
+}
+function sideRow(side, isDone){
+  const cls = isDone ? (side.winner ? "win" : "lose") : "";
+  const scoreCell = side.score!=null
+    ? '<span class="sc">'+esc(side.score)+(side.shootout!=null?'<span class="pens">('+esc(side.shootout)+')</span>':'')+'</span>'
+    : "";
+  return '<div class="side '+cls+'">'+crest(side)+
+         '<span class="nm">'+esc(side.tbd?"A definir":side.name)+'</span>'+
+         (side.abbr && !side.tbd?'<span class="ab">'+esc(side.abbr)+'</span>':'')+
+         scoreCell+'</div>';
+}
+function metaCell(m){
+  if (m.state==="in"){
+    return '<div class="match-meta"><span class="live-tag"><span class="pulse"></span>AO VIVO</span>'+
+           (m.clock?'<span class="tag">'+esc(m.clock)+'</span>':'')+'</div>';
+  }
+  if (m.completed || m.state==="post"){
+    let pen = (m.home.score!=null && m.home.score===m.away.score) ? "nos pênaltis" : "";
+    return '<div class="match-meta"><span class="tag done">Encerrado</span>'+
+           (pen?'<span class="venue">'+pen+'</span>':(m.venue?'<span class="venue">'+esc(m.venue)+'</span>':''))+'</div>';
+  }
+  return '<div class="match-meta"><span class="kick">'+timeLabel(m.dateUTC)+
+         '<small>'+shortDate(m.dateUTC)+'</small></span>'+
+         (m.venue?'<span class="venue">'+esc(m.venue)+'</span>':'')+'</div>';
+}
+function matchCard(m){
+  const done = m.completed || m.state==="post";
+  const color = ROUND_META[m.round] ? ROUND_META[m.round].color : "var(--c-r32)";
+  const groupTag = m.group ? '<span class="ab">'+esc(m.group)+'</span>' : '';
+  return '<div class="match '+(m.state==="in"?"islive":"")+'">'+
+    '<div class="rbar" style="background:'+color+'"></div>'+
+    '<div class="match-body">'+sideRow(m.home,done)+sideRow(m.away,done)+'</div>'+
+    metaCell(m)+'</div>';
+}
+
+/* ================================================================
+   RENDER — JOGOS
+   ================================================================ */
+function renderJogos(matches){
+  const live = matches.filter(m=>m.state==="in");
+  const upcoming = matches.filter(m=>m.state==="pre").sort((a,b)=>new Date(a.dateUTC)-new Date(b.dateUTC));
+  const past = matches.filter(m=>m.completed || m.state==="post").sort((a,b)=>new Date(b.dateUTC)-new Date(a.dateUTC));
+
+  // AO VIVO
+  const lw = document.getElementById("liveWrap");
+  lw.innerHTML = live.length
+    ? '<div class="block"><p class="section-title" style="color:var(--live)">Ao vivo agora</p><div class="matches">'+live.map(matchCard).join("")+'</div></div>'
+    : "";
+
+  // PRÓXIMOS (agrupado por dia, limitado)
+  const uw = document.getElementById("upcomingWrap");
+  if (!upcoming.length){
+    uw.innerHTML = '<p class="section-title">Próximos jogos</p><p class="empty">Nenhum jogo agendado à frente. A Copa pode ter terminado — confira Resultados e o Chaveamento.</p>';
+  } else {
+    const show = upcoming.slice(0, 16);
+    let html = '<p class="section-title">Próximos jogos</p>';
+    let curDay = "";
+    for (const m of show){
+      const dk = fmtDayKey.format(new Date(m.dateUTC));
+      if (dk !== curDay){ curDay = dk; html += '<div class="day-head">'+esc(dk)+'</div>'; }
+      html += '<div class="matches" style="margin-bottom:2px">'+matchCard(m)+'</div>';
+    }
+    if (upcoming.length > show.length) html += '<div class="day-head" style="opacity:.7">+ '+(upcoming.length-show.length)+' jogos mais adiante</div>';
+    uw.innerHTML = html;
+  }
+
+  // RESULTADOS (agrupado por rodada, mais recente primeiro; fase de grupos recolhida)
+  const rw = document.getElementById("resultsWrap");
+  if (!past.length){
+    rw.innerHTML = '<p class="section-title">Resultados</p><p class="empty">Ainda sem jogos encerrados.</p>';
+  } else {
+    const byRound = {};
+    for (const m of past){ (byRound[m.round] = byRound[m.round] || []).push(m); }
+    const orderedKeys = Object.keys(byRound).sort((a,b)=>ROUND_META[b].order-ROUND_META[a].order);
+    let html = '<p class="section-title">Resultados</p>';
+    for (const k of orderedKeys){
+      const meta = ROUND_META[k];
+      const list = byRound[k].sort((a,b)=>new Date(b.dateUTC)-new Date(a.dateUTC));
+      const inner = '<div class="matches">'+list.map(matchCard).join("")+'</div>';
+      if (k === "group"){
+        html += '<details class="round-fold"><summary><span class="dot" style="width:10px;height:10px;border-radius:50%;background:'+meta.color+'"></span>'+meta.label+' — '+list.length+' jogos</summary>'+inner+'</details>';
+      } else {
+        html += '<div class="round-heading"><span class="dot" style="background:'+meta.color+'"></span>'+meta.label+' <span class="ab">'+list.length+'</span></div>'+inner;
+      }
+    }
+    rw.innerHTML = html;
+  }
+}
+
+/* ================================================================
+   RENDER — CHAVEAMENTO
+   ================================================================ */
+/* ----------------------------------------------------------------
+   Ordenação oficial do chaveamento.
+   A ESPN numera os jogos de cada fase em ordem cronológica e nomeia
+   as vagas futuras com esse número ("Round of 32 11 Winner").
+   Validado contra os confrontos já definidos: CAN=vencedor do jogo 1,
+   MAR=4, PAR=3, FRA=6, BRA=2, NOR=5, MEX=7, ENG=8. Cada confronto é
+   ligado aos 2 jogos de origem — pelo time (se definido) ou por esse
+   número — e a árvore é montada da final para trás.
+   ---------------------------------------------------------------- */
+const PREV_ROUND = { r16:"r32", qf:"r16", sf:"qf", final:"sf" };
+function lastNum(s){
+  const all = String(s||"").match(/\d+/g);
+  return all ? parseInt(all[all.length-1],10) : null;   // "Round of 32 11 Winner" -> 11 (o último número)
+}
+function orderKnockout(byRound){
+  const info = {};
+  for (const r of BRACKET_ORDER){
+    const list = (byRound[r]||[]).slice().sort((a,b)=> new Date(a.dateUTC)-new Date(b.dateUTC) || String(a.id).localeCompare(String(b.id)));
+    info[r] = list.map((m,i)=> ({ m, num:i+1 }));       // numeração local da fase, 1..cap
+  }
+  const parentOf = (round, side) => {
+    const prev = info[PREV_ROUND[round]] || [];
+    if (side && !side.tbd && side.abbr){                 // time já definido: acha o jogo de onde ele veio
+      const hit = prev.find(x => x.m.home.abbr===side.abbr || x.m.away.abbr===side.abbr);
+      if (hit) return hit;
+    }
+    const nref = side && side.tbd ? lastNum(side.raw || side.name) : null;
+    if (nref!=null){                                     // vaga "a definir": usa o número oficial
+      const hit = prev.find(x => x.num===nref);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const ordered = { final: [ info.final[0] ? info.final[0].m : null ] };
+  let cur = [ info.final[0] || null ];
+  for (const childRound of ["final","sf","qf","r16"]){
+    const prevKey = PREV_ROUND[childRound];
+    const slots = [];
+    const used = new Set();
+    for (const child of cur){
+      if (!child){ slots.push(null,null); continue; }
+      for (const side of [child.m.home, child.m.away]){
+        const p = parentOf(childRound, side);
+        if (p && !used.has(p)){ slots.push(p); used.add(p); }
+        else slots.push(null);
+      }
+    }
+    const rest = (info[prevKey]||[]).filter(x=>!used.has(x));   // sobras (se algo falhar) em ordem cronológica
+    let ri = 0;
+    for (let i=0;i<slots.length;i++) if (!slots[i] && ri<rest.length) slots[i] = rest[ri++];
+    ordered[prevKey] = slots.map(x=> x ? x.m : null);
+    cur = slots;
+  }
+  return ordered;
+}
+
+function renderBracket(matches){
+  // legenda
+  document.getElementById("legend").innerHTML = BRACKET_ORDER.map(k=>{
+    const m = ROUND_META[k];
+    return '<span><i style="background:'+m.color+'"></i>'+m.label+'</span>';
+  }).join("") + '<span><i style="background:var(--win)"></i>classificado</span>';
+
+  const byRound = {};
+  for (const m of matches) (byRound[m.round] = byRound[m.round] || []).push(m);
+
+  const ordered = orderKnockout(byRound);
+  const parts = [];
+  BRACKET_ORDER.forEach((k, idx)=>{
+    const meta = ROUND_META[k];
+    const list = ordered[k] || [];
+    const have = list.filter(Boolean).length;
+    let spots = "";
+    for (let i=0;i<meta.cap;i++){
+      const card = list[i] ? bracketCard(list[i], meta.color) : bracketTBD(meta.color);
+      spots += '<div class="spot">'+card+'</div>';
+    }
+    const isFinal = k==="final";
+    parts.push('<div class="col'+(isFinal?" final-col":"")+'">'+
+      '<div class="col-head"><span class="dot" style="background:'+meta.color+'"></span>'+meta.label+
+      '<span class="cnt">'+have+'/'+meta.cap+'</span></div>'+
+      '<div class="col-body">'+spots+'</div></div>');
+    if (idx < BRACKET_ORDER.length-1){
+      const nextCap = ROUND_META[BRACKET_ORDER[idx+1]].cap;  // jogos da fase seguinte = nº de cotovelos
+      let elbows = "";
+      for (let e=0;e<nextCap;e++) elbows += '<div class="elbow"></div>';
+      parts.push('<div class="conn"><div class="conn-head"></div><div class="conn-body">'+elbows+'</div></div>');
+    }
+  });
+  document.getElementById("bracket").innerHTML = parts.join("");
+
+  // disputa de 3º lugar (fora da árvore principal)
+  const third = (byRound["third"] || [])[0];
+  const tw = document.getElementById("thirdWrap");
+  const meta3 = ROUND_META.third;
+  tw.innerHTML = '<div class="col" style="max-width:260px">'+
+    '<div class="col-head"><span class="dot" style="background:'+meta3.color+'"></span>'+meta3.label+'</div>'+
+    (third ? bracketCard(third, meta3.color) : bracketTBD(meta3.color))+'</div>';
+}
+function brow(side, done){
+  if (side.tbd) return '<div class="brow tbdrow"><span class="ab">A definir</span></div>';
+  const cls = done ? (side.winner?"win":"lose") : "";
+  const logo = side.logo ? '<img class="bcrest" src="'+esc(side.logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '';
+  const sc = side.score!=null ? '<span class="bsc">'+esc(side.score)+(side.shootout!=null?' <span class="pens">('+esc(side.shootout)+')</span>':'')+'</span>' : '';
+  return '<div class="brow '+cls+'">'+logo+'<span class="ab">'+esc(side.abbr||side.name)+'</span>'+sc+'</div>';
+}
+function bracketCard(m, color){
+  const done = m.completed || m.state==="post";
+  const live = m.state==="in";
+  const foot = live ? '<div class="bdate" style="color:var(--live)">● ao vivo '+esc(m.clock||"")+'</div>'
+                    : '<div class="bdate">'+shortDate(m.dateUTC)+(done?'':' · '+timeLabel(m.dateUTC))+'</div>';
+  return '<div class="bcard" style="border-left-color:'+color+'">'+brow(m.home,done)+brow(m.away,done)+foot+'</div>';
+}
+function bracketTBD(color){
+  return '<div class="bcard tbd" style="border-left-color:'+color+'">'+
+    '<div class="brow tbdrow"><span class="ab">A definir</span></div>'+
+    '<div class="brow tbdrow"><span class="ab">A definir</span></div></div>';
+}
+
+/* ================================================================
+   RENDER — ARTILHEIROS
+   ================================================================ */
+/* agrega a artilharia da Copa 2026 a partir dos lances (details) da API */
+function aggregateScorers(json){
+  const events = (json && json.events) || [];
+  const tmap = {};
+  for (const ev of events){
+    const comps = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
+    for (const c of comps){ const t=c.team||{}; if (t.id) tmap[t.id]={ abbr:t.abbreviation||"?", name:t.displayName||"?", logo:t.logo||"" }; }
+  }
+  const tally = {};
+  for (const ev of events){
+    const dets = (ev.competitions && ev.competitions[0] && ev.competitions[0].details) || [];
+    for (const d of dets){
+      if (!d.scoringPlay || d.ownGoal || d.shootout) continue;   // gol valido: sem gol-contra, sem disputa de penaltis
+      for (const a of (d.athletesInvolved||[])){
+        const k = a.id || a.displayName; if (!k) continue;
+        const ti = tmap[(a.team||{}).id] || {};
+        const r = tally[k] || (tally[k]={ name:a.displayName||"?", abbr:ti.abbr||"?", teamName:ti.name||"", logo:ti.logo||"", goals:0, pen:0 });
+        r.goals++; if (d.penaltyKick) r.pen++;
+      }
+    }
+  }
+  return Object.values(tally).sort((a,b)=> b.goals-a.goals || a.name.localeCompare(b.name)).slice(0,12);
+}
+function renderScorers2026(list){
+  const el = document.getElementById("scorers2026");
+  const cap = document.getElementById("cap2026");
+  if (!list || !list.length){
+    el.innerHTML = '<p class="empty" style="padding:22px">Sem gols computados ainda nesta edição.</p>';
+    if (cap) cap.textContent = "";
+    return;
+  }
+  const max = list[0].goals || 1;
+  el.innerHTML = list.map((s,i)=>{
+    const col = MEDAL[i] || "#5FBFA8";
+    const pct = Math.round(s.goals/max*100);
+    const crestImg = s.logo ? '<img class="crest" src="'+esc(s.logo)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '';
+    const penTxt = s.pen ? ' · '+s.pen+' de pênalti' : '';
+    return '<div class="scorer">'+
+      '<div class="rankn" style="color:'+col+'">'+(i+1)+'</div>'+
+      '<div class="sc-main">'+
+        '<div class="sc-name">'+crestImg+esc(s.name)+'</div>'+
+        '<div class="sc-sub">'+esc(s.teamName||s.abbr)+penTxt+'</div>'+
+        '<div class="sc-bar"><i style="width:'+pct+'%;background:'+col+'"></i></div>'+
+      '</div>'+
+      '<div class="sc-goals"><b style="color:'+col+'">'+s.goals+'</b><span>gols</span></div>'+
+    '</div>';
+  }).join("");
+  if (cap) cap.textContent = "Gols marcados nesta edição, somados em tempo real a partir dos lances de cada jogo. Pênaltis batidos em jogo contam; disputas de pênalti e gols contra, não.";
+}
+function renderScorers(){
+  const max = Math.max.apply(null, SCORERS.map(s=>s.goals));
+  document.getElementById("scorers").innerHTML = SCORERS.map((s,i)=>{
+    const pct = Math.round(s.goals/max*100);
+    const col = MEDAL[i] || "#5FBFA8";
+    return '<div class="scorer">'+
+      '<div class="rankn" style="color:'+col+'">'+(i+1)+'</div>'+
+      '<div class="sc-main">'+
+        '<div class="sc-name"><span class="flag">'+s.flag+'</span>'+esc(s.name)+
+          (s.active?'<span class="active-tag">em atividade</span>':'')+'</div>'+
+        '<div class="sc-sub">'+esc(s.sub)+'</div>'+
+        '<div class="sc-bar"><i style="width:'+pct+'%;background:'+col+'"></i></div>'+
+      '</div>'+
+      '<div class="sc-goals"><b style="color:'+col+'">'+s.goals+'</b><span>gols</span></div>'+
+    '</div>';
+  }).join("");
+}
+
+/* ================================================================
+   HEADER — fase atual + estatísticas
+   ================================================================ */
+function renderHeader(matches){
+  const nowRound = roundForDate(new Date().toISOString());
+  const meta = ROUND_META[nowRound] || ROUND_META.group;
+  const pill = document.getElementById("phasePill");
+  pill.innerHTML = '<span class="dot" style="background:'+meta.color+'"></span> Fase atual: '+meta.label;
+
+  const done = matches.filter(m=>m.completed||m.state==="post").length;
+  const up = matches.filter(m=>m.state==="pre").length;
+  const live = matches.filter(m=>m.state==="in").length;
+  const rows = [
+    ["Jogos realizados", done],
+    ["Próximos", up],
+  ];
+  if (live) rows.unshift(["Ao vivo", live]);
+  document.getElementById("statline").innerHTML = rows.map(r=>
+    '<div class="stat"><span class="n"'+(r[0]==="Ao vivo"?' style="color:var(--live)"':'')+'>'+r[1]+'</span><span class="l">'+r[0]+'</span></div>'
+  ).join("");
+}
+
+/* ================================================================
+   CARREGAMENTO / ESTADO
+   ================================================================ */
+let refreshing = false;
+function setLoading(on){
+  refreshing = on;
+  const b = document.getElementById("btnRefresh");
+  b.disabled = on;
+  b.innerHTML = on ? '<span class="spin"></span> Atualizando' : 'Atualizar';
+  if (on){
+    ["liveWrap","upcomingWrap"].forEach(id=>{ if(!document.getElementById(id).innerHTML) document.getElementById(id).innerHTML=""; });
+  }
+}
+function showFirstLoad(){
+  document.getElementById("upcomingWrap").innerHTML = '<div class="loading"><div class="spin"></div>Carregando dados da Copa 2026…</div>';
+}
+function markSource(online){
+  const b = document.getElementById("srcBadge");
+  b.className = "src-badge" + (online?"":" offline");
+  b.innerHTML = '<span class="d"></span> ' + (online ? "ao vivo · ESPN" : "offline · retrato salvo");
+  document.getElementById("offlineBanner").hidden = online;
+}
+function stamp(){
+  const t = fmtClock.format(new Date()).replace(":","h");
+  document.getElementById("updated").innerHTML = 'Atualizado às <b>'+t+'</b>';
+}
+
+let liveNow = 0;
+let refreshTimer = null;
+async function load(){
+  if (refreshing) return;
+  if (refreshTimer){ clearTimeout(refreshTimer); refreshTimer = null; }
+  setLoading(true);
+  try{
+    const res = await fetch(ESPN_URL, { cache:"no-store" });
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    const json = await res.json();
+    const matches = normalize(json);
+    if (!matches.length) throw new Error("sem eventos");
+    paint(matches, aggregateScorers(json), true);
+    markSource(true);
+  }catch(err){
+    console.warn("Falha ao buscar ESPN:", err);
+    paint(prepFallback(FALLBACK_MATCHES), FALLBACK_2026.slice(), false);
+    markSource(false);
+    if (!document.getElementById("upcomingWrap").innerHTML){
+      document.getElementById("upcomingWrap").innerHTML =
+        '<div class="errorbox"><h3>Sem conexão com os dados</h3>'+
+        '<p>Não deu para acessar <code>site.api.espn.com</code>. Costuma ser bloqueio de sandbox da pré-visualização ou falta de internet.</p>'+
+        '<p>Baixe o arquivo e abra no navegador, depois toque em <b>Atualizar</b>.</p></div>';
+    }
+  }finally{
+    setLoading(false);
+    stamp();
+    scheduleNext();
+  }
+}
+function paint(matches, scorers2026, online){
+  liveNow = matches.filter(m=>m.state==="in").length;
+  renderHeader(matches);
+  renderJogos(matches);
+  renderBracket(matches);
+  renderScorers2026(scorers2026);
+}
+/* refresh adaptativo: 2 min quando ha jogo ao vivo, senao 1 hora */
+function scheduleNext(){
+  if (refreshTimer) clearTimeout(refreshTimer);
+  const live = liveNow > 0;
+  refreshTimer = setTimeout(load, live ? 2*60*1000 : HOUR);
+  const cad = document.getElementById("cadence");
+  if (cad){
+    cad.textContent = live ? "● jogo ao vivo · atualiza a cada 2 min" : "Atualiza sozinho a cada hora";
+    cad.style.color = live ? "var(--live)" : "";
+  }
+}
+
+/* ================================================================
+   TABS
+   ================================================================ */
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected","false"));
+    tab.setAttribute("aria-selected","true");
+    const id = tab.dataset.tab;
+    document.getElementById("panel-jogos").hidden = id!=="jogos";
+    document.getElementById("panel-chave").hidden = id!=="chave";
+    document.getElementById("panel-artil").hidden = id!=="artil";
+    window.scrollTo({ top:0, behavior:"smooth" });
+  });
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+document.getElementById("btnRefresh").addEventListener("click", load);
+renderScorers();          // historico (estatico)
+showFirstLoad();
+load();                   // primeira carga + agenda a proxima (scheduleNext no finally)
+</script>
+</body>
+</html>
