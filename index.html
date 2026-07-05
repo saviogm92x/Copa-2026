@@ -141,6 +141,30 @@
   .section-title::after{ content:""; flex:1; height:1px; background:var(--line); }
   .block{ margin-bottom:34px; }
 
+  /* ---------- busca por seleção ---------- */
+  .searchbar{
+    display:flex; align-items:center; gap:10px;
+    background:var(--pitch-2); border:1px solid var(--line-2); border-radius:12px;
+    padding:10px 14px; margin-bottom:8px; transition:border-color .15s;
+  }
+  .searchbar:focus-within{ border-color:var(--c-r32); }
+  .searchbar svg{ flex:0 0 auto; color:var(--mute); }
+  .searchbar input{
+    flex:1; min-width:0; background:transparent; border:none; outline:none;
+    color:var(--chalk); font-family:"Inter",sans-serif; font-size:15px;
+  }
+  .searchbar input::placeholder{ color:var(--mute); opacity:.85; }
+  .searchbar input[type="search"]::-webkit-search-cancel-button{ -webkit-appearance:none; }
+  .searchbar .clear{
+    flex:0 0 auto; border:1px solid var(--line-2); background:transparent; color:var(--mute);
+    width:24px; height:24px; border-radius:50%; cursor:pointer; font-size:15px; line-height:1;
+    display:none; align-items:center; justify-content:center; padding:0;
+  }
+  .searchbar .clear:hover{ color:var(--chalk); }
+  .searchbar.has-text .clear{ display:inline-flex; }
+  .search-info{ font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--mute); margin:0 0 20px; padding-left:2px; min-height:15px; }
+  .search-info b{ color:var(--chalk); font-weight:600; }
+
   /* ---------- match strip (Jogos) ---------- */
   .day-head{
     font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
@@ -341,6 +365,13 @@
 
     <!-- ===================== JOGOS ===================== -->
     <section class="panel" id="panel-jogos">
+      <div class="searchbar" id="searchBar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.4" y2="16.4"/></svg>
+        <input id="teamSearch" type="search" list="teamList" placeholder="Filtrar por seleção — ex.: Brasil, Egito, França…" autocomplete="off" />
+        <button class="clear" id="searchClear" aria-label="Limpar busca">×</button>
+      </div>
+      <p class="search-info" id="searchInfo"></p>
+      <datalist id="teamList"></datalist>
       <div id="liveWrap"></div>
       <div class="block" id="upcomingWrap"></div>
       <div class="block" id="resultsWrap"></div>
@@ -586,10 +617,41 @@ function matchCard(m){
 /* ================================================================
    RENDER — JOGOS
    ================================================================ */
+/* ---------- busca por seleção ---------- */
+function foldTxt(s){ return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(); }
+function teamQuery(){ const el = document.getElementById("teamSearch"); return el ? foldTxt(el.value.trim()) : ""; }
+function sideHits(s, q){ return !s.tbd && (foldTxt(s.name).includes(q) || foldTxt(s.abbr).includes(q) || foldTxt(s.raw).includes(q)); }
+function fillTeamList(matches){
+  const dl = document.getElementById("teamList"); if (!dl) return;
+  const names = new Set();
+  for (const m of matches) for (const s of [m.home, m.away]) if (!s.tbd && s.name && s.name!=="A definir") names.add(s.name);
+  dl.innerHTML = Array.from(names).sort((a,b)=>a.localeCompare(b,"pt")).map(nm=>'<option value="'+esc(nm)+'"></option>').join("");
+}
+function updateSearchInfo(q, list){
+  const bar = document.getElementById("searchBar");
+  if (bar) bar.classList.toggle("has-text", !!q);
+  const el = document.getElementById("searchInfo"); if (!el) return;
+  if (!q || !list.length){ el.innerHTML = ""; return; }
+  const names = new Set();
+  for (const m of list) for (const s of [m.home, m.away]) if (sideHits(s, q)) names.add(s.name);
+  const arr = Array.from(names).sort((a,b)=>a.localeCompare(b,"pt"));
+  el.innerHTML = '<b>'+list.length+'</b> jogo'+(list.length>1?'s':'')+' · '+esc(arr.slice(0,4).join(", "))+(arr.length>4?' +'+(arr.length-4)+' seleções':'');
+}
 function renderJogos(matches){
-  const live = matches.filter(m=>m.state==="in");
-  const upcoming = matches.filter(m=>m.state==="pre").sort((a,b)=>new Date(a.dateUTC)-new Date(b.dateUTC));
-  const past = matches.filter(m=>m.completed || m.state==="post").sort((a,b)=>new Date(b.dateUTC)-new Date(a.dateUTC));
+  const q = teamQuery();
+  const filtered = q ? matches.filter(m => sideHits(m.home, q) || sideHits(m.away, q)) : matches;
+  updateSearchInfo(q, filtered);
+  if (q && !filtered.length){
+    document.getElementById("liveWrap").innerHTML = "";
+    document.getElementById("resultsWrap").innerHTML = "";
+    document.getElementById("upcomingWrap").innerHTML =
+      '<div class="errorbox"><h3>Nenhuma seleção encontrada</h3>'+
+      '<p>Nada bate com \u201c'+esc((document.getElementById("teamSearch")||{}).value || "")+'\u201d. Tente o nome em português — Brasil, Egito, Suíça…</p></div>';
+    return;
+  }
+  const live = filtered.filter(m=>m.state==="in");
+  const upcoming = filtered.filter(m=>m.state==="pre").sort((a,b)=>new Date(a.dateUTC)-new Date(b.dateUTC));
+  const past = filtered.filter(m=>m.completed || m.state==="post").sort((a,b)=>new Date(b.dateUTC)-new Date(a.dateUTC));
 
   // AO VIVO
   const lw = document.getElementById("liveWrap");
@@ -602,7 +664,7 @@ function renderJogos(matches){
   if (!upcoming.length){
     uw.innerHTML = '<p class="section-title">Próximos jogos</p><p class="empty">Nenhum jogo agendado à frente. A Copa pode ter terminado — confira Resultados e o Chaveamento.</p>';
   } else {
-    const show = upcoming.slice(0, 16);
+    const show = q ? upcoming : upcoming.slice(0, 16);
     let html = '<p class="section-title">Próximos jogos</p>';
     let curDay = "";
     for (const m of show){
@@ -627,7 +689,7 @@ function renderJogos(matches){
       const meta = ROUND_META[k];
       const list = byRound[k].sort((a,b)=>new Date(b.dateUTC)-new Date(a.dateUTC));
       const inner = '<div class="matches">'+list.map(matchCard).join("")+'</div>';
-      if (k === "group"){
+      if (k === "group" && !q){
         html += '<details class="round-fold"><summary><span class="dot" style="width:10px;height:10px;border-radius:50%;background:'+meta.color+'"></span>'+meta.label+' — '+list.length+' jogos</summary>'+inner+'</details>';
       } else {
         html += '<div class="round-heading"><span class="dot" style="background:'+meta.color+'"></span>'+meta.label+' <span class="ab">'+list.length+'</span></div>'+inner;
@@ -859,6 +921,7 @@ function stamp(){
 }
 
 let liveNow = 0;
+let lastMatches = [];
 let refreshTimer = null;
 async function load(){
   if (refreshing) return;
@@ -890,6 +953,8 @@ async function load(){
 }
 function paint(matches, scorers2026, online){
   liveNow = matches.filter(m=>m.state==="in").length;
+  lastMatches = matches;
+  fillTeamList(matches);
   renderHeader(matches);
   renderJogos(matches);
   renderBracket(matches);
@@ -926,6 +991,10 @@ document.querySelectorAll(".tab").forEach(tab=>{
    INIT
    ================================================================ */
 document.getElementById("btnRefresh").addEventListener("click", load);
+const _search = document.getElementById("teamSearch");
+_search.addEventListener("input", ()=> renderJogos(lastMatches));
+_search.addEventListener("keydown", e=>{ if (e.key === "Escape"){ _search.value = ""; renderJogos(lastMatches); } });
+document.getElementById("searchClear").addEventListener("click", ()=>{ _search.value = ""; _search.focus(); renderJogos(lastMatches); });
 renderScorers();          // historico (estatico)
 showFirstLoad();
 load();                   // primeira carga + agenda a proxima (scheduleNext no finally)
